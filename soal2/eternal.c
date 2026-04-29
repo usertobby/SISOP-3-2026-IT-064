@@ -667,7 +667,7 @@ int main(void) {
                 }
                 break;
             case 3:
-                printf("Goodbye, warrior.\n");
+                printf("Be safe, Warrior.\n");
                 return 0;
             default:
                 break;
