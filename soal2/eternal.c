@@ -6,11 +6,11 @@
 static int   msgq_id   = -1;
 static pid_t my_pid;
 static char  my_username[MAX_USERNAME];
-static int   my_pidx   = -1;   // player index di SHM (Shared Memory)
+static int   my_pidx   = -1;        // player index di in SHM (Shared Memory)
 static int   my_gold   = 150;
 static int   my_lvl    = 1;
 static int   my_xp     = 0;
-static int   my_weapon_idx = -1;  /* -1 = no weapon */
+static int   my_weapon_idx = -1;    // -1 = no weapon
 
 // === Terminal Utilities ===
 static struct termios orig_termios;
@@ -20,7 +20,7 @@ static void term_raw(void) {
     struct termios raw = orig_termios;
     raw.c_lflag &= ~(ICANON | ECHO);
     raw.c_cc[VMIN]  = 0;
-    raw.c_cc[VTIME] = 1;  // this means a 0.1s timeout
+    raw.c_cc[VTIME] = 1;        // this means a 0.1s timeout
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
  
@@ -36,7 +36,7 @@ static void clear_screen(void) {
 static void send_req(int cmd, const char *d1, const char *d2, int idata) {
     IpcMsg m;
     memset(&m, 0, sizeof(m));
-    m.mtype      = 1;       // server listens on mtype=1
+    m.mtype      = 1;           // server listens on mtype=1
     m.cmd        = cmd;
     m.sender_pid = my_pid;
     if (d1) strncpy(m.data1, d1, MAX_USERNAME - 1);
@@ -90,9 +90,11 @@ static void print_profile(void) {
 static void do_register(void) {
     char uname[MAX_USERNAME], pass[MAX_PASSWORD];
     printf("\033[1;32mCREATE ACCOUNT\033[0m\n");
-    printf("Username: "); fflush(stdout);
+    printf("Username: ");
+    fflush(stdout);
     scanf("%31s", uname);
-    printf("Password: "); fflush(stdout);
+    printf("Password: ");
+    fflush(stdout);
     scanf("%31s", pass);
  
     send_req(MSG_REGISTER, uname, pass, 0);
@@ -116,9 +118,11 @@ static void do_register(void) {
 static int do_login(void) {
     char uname[MAX_USERNAME], pass[MAX_PASSWORD];
     printf("\033[1;36mLOGIN\033[0m\n");
-    printf("Username: "); fflush(stdout);
+    printf("Username: ");
+    fflush(stdout);
     scanf("%31s", uname);
-    printf("Password: "); fflush(stdout);
+    printf("Password: ");
+    fflush(stdout);
     scanf("%31s", pass);
  
     send_req(MSG_LOGIN, uname, pass, 0);
@@ -133,7 +137,9 @@ static int do_login(void) {
             my_lvl        = r.p_lvl;
             my_xp         = r.p_xp;
             my_weapon_idx = r.p_weapon_idx;
-            printf("Press [ENTER]..."); getchar(); getchar();
+            printf("Press [ENTER]...");
+            getchar();
+            getchar();
             return 1;
         } else {
             printf("\033[1;31m%s\033[0m\n", r.msg);
@@ -185,7 +191,7 @@ static void do_armory(void) {
     if (recv_resp(&r, 5)) {
         if (r.status == RESP_OK) {
             printf("\033[1;32m%s\033[0m\n", r.msg);
-            /* Sync gold dan weapon terbaru dari server */
+            // Sync gold and weapon from server
             my_gold        = r.p_gold;
             my_weapon_idx  = r.p_weapon_idx;
         } else {
@@ -213,6 +219,7 @@ static void do_history(void) {
         if (!recv_resp(&r, 3)) {
             break;
         }
+
         if (r.status == RESP_OK) {
             break;      // sentinel
         }
@@ -267,9 +274,8 @@ static void render_battle(const char *self_name, const char *opp_name,
     clear_screen();
     printf("\033[1;33m=== ARENA ===\033[0m\n\n");
  
-    // Opponent bar (weapon hidden)
-    printf("  %-12s  Lvl %d\n",
-           opp_name, opp_lvl);
+    // Opponent bar (weapon is hidden)
+    printf("  %-12s  Lvl %d\n", opp_name, opp_lvl);
  
     int bar_opp = (max_opp > 0) ? (hp_opp * 20 / max_opp) : 0;
     if (bar_opp < 0) {
@@ -284,8 +290,7 @@ static void render_battle(const char *self_name, const char *opp_name,
     printf("              VS\n\n");
  
     // Self bar
-    printf("  %-12s  Lvl %d  | Weapon: %s\n",
-           self_name, self_lvl,
+    printf("  %-12s  Lvl %d  | Weapon: %s\n", self_name, self_lvl,
            self_wpn >= 0 ? WEAPONS[self_wpn].name : "None");
  
     int bar_self = (max_self > 0) ? (hp_self * 20 / max_self) : 0;
@@ -357,7 +362,7 @@ static void *battle_recv_thread(void *arg) {
                 bs->max_opp  = r.max_hp_opp;
             }
 
-            /* Tampilkan di combat log hanya jika ada damage baru */
+            // Shown in combat log only if there is new damage
             if (r.last_dmg > 0) {
                 char buf[64];
                 if (r.is_ultimate) {
@@ -367,6 +372,7 @@ static void *battle_recv_thread(void *arg) {
                 }
                 log_push(&bs->log, buf);
             }
+
         } else if (r.status == RESP_BATTLE_END) {
             bs->hp_self     = r.hp_self;
             bs->hp_opp      = r.hp_opp;
@@ -382,13 +388,16 @@ static void *battle_recv_thread(void *arg) {
 
             bs->battle_over = r.battle_over;
             bs->running     = 0;
+
         } else if (r.status == RESP_FAIL) {
             char buf[64];
             snprintf(buf, sizeof(buf), "! %.58s", r.msg);
             log_push(&bs->log, buf);
         }
+
         pthread_mutex_unlock(&bs->mu);
     }
+
     return NULL;
 }
  
@@ -419,7 +428,6 @@ static void do_battle(void) {
     // Waiting for match
     clear_screen();
     print_banner();
-    // printf("  Searching for an opponent... [%ds]\n", MATCHMAKING_TIMEOUT);
     fflush(stdout);
  
     // Wait for RESP_MATCH_FOUND or RESP_MATCH_TIMEOUT
@@ -518,7 +526,7 @@ static void do_battle(void) {
         pthread_mutex_unlock(&bs.mu);
  
         if (over) {
-            usleep(500000);     // tunggu 0.5s agar recv_thread selesai set state
+            usleep(500000);     // Wait 0.5s so that recv_thread finished set state
             break;
         }
 
@@ -529,7 +537,7 @@ static void do_battle(void) {
                 if (now - last_atk_time >= ATTACK_COOLDOWN) {
                     send_req(MSG_ATTACK, my_username, NULL, battle_idx);
                     last_atk_time = now;
-                    // note: combat log di isi oleh battle_recv_thread
+                    // note: combat log filled by battle_recv_thread
                 } else {
                     pthread_mutex_lock(&bs.mu);
                     log_push(&bs.log, "Cooldown active.");
@@ -540,7 +548,7 @@ static void do_battle(void) {
                 if (now - last_atk_time >= ATTACK_COOLDOWN) {
                     send_req(MSG_ULTIMATE, my_username, NULL, battle_idx);
                     last_atk_time = now;
-                    // note: combat log di isi oleh battle_recv_thread
+                    // note: combat log filled by battle_recv_thread
                 } else {
                     pthread_mutex_lock(&bs.mu);
                     log_push(&bs.log, "Cooldown active.");
@@ -556,7 +564,7 @@ static void do_battle(void) {
     pthread_join(recv_t, NULL);
     term_restore();
     
-    // flush sisa karakter dari raw mode
+    // flush remaining characters from raw mode
     int c;
     while ((c = getchar()) != EOF && c != '\n');
 

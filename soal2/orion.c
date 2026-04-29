@@ -31,8 +31,6 @@ static void save_players(void) {
 static void load_players(void) {
     char cwd[256];
     getcwd(cwd, sizeof(cwd));
-    // printf("[Orion] Working dir: %s\n", cwd);
-    // printf("[Orion] Looking for save file: %s/%s\n", cwd, SAVE_FILE);
 
     FILE *f = fopen(SAVE_FILE, "rb");
     if (f) {
@@ -43,14 +41,14 @@ static void load_players(void) {
             shm_players->count = 0;
             return;
         }
-        /* Validasi count masuk akal */
+        // Validate player count
         if (shm_players->count < 0 || shm_players->count > MAX_PLAYERS) {
             printf("[Orion] Save file invalid count=%d, starting fresh.\n",
                    shm_players->count);
             shm_players->count = 0;
             return;
         }
-        // reset semua status login (in_use) saat server start
+        // Reset all login state (in_use) when server starts
         for (int i = 0; i < shm_players->count; i++) {
             shm_players->entries[i].p.in_use = 0;
             shm_players->entries[i].p.pid    = 0;
@@ -93,7 +91,7 @@ static int find_free_battle(void) {
     return -1;
 }
 
-// === Bot Thread (buat lawan bot) ===
+// === Bot Thread (match with bot) ===
 typedef struct {
     int battle_idx;
     int bot_slot;       // 1 = bot is player1, 2 = bot is player2
@@ -119,8 +117,7 @@ static void *bot_thread(void *arg) {
         time_t *bot_last = (bot_slot == 1) ? &b->last_atk1 : &b->last_atk2;
  
         if (now - *bot_last >= ATTACK_COOLDOWN) {
-            // Bot damage: random around base
-            int dmg = BASE_DAMAGE + (rand() % 5);
+            int dmg = BASE_DAMAGE + (rand() % 5);   // Bot damage: random around base
             *opp_hp -= dmg;
             *bot_last = now;
  
@@ -134,12 +131,12 @@ static void *bot_thread(void *arg) {
         if (shm_battles->battles[bidx].finished) {
             break;
         }
-        usleep(300000);     // check setiap 0.3 detik
+        usleep(300000);     // check every 0.3 seconds
     }
     return NULL;
 }
 
-// === Battle Thread (notifikasi ke dua client) ===
+// === Battle Thread (Notification to both clients) ===
 typedef struct {
     int battle_idx;
     int p1_idx;
@@ -149,7 +146,7 @@ typedef struct {
 } BattleArg;
 
 static void send_battle_update(int msgq, pid_t pid, Battle *b, 
-                               int self_slot, /* 1 or 2 */
+                               int self_slot,   // 1 or 2
                                const char *opp_name, 
                                int self_weapon, int opp_weapon,
                                int self_lvl, int opp_lvl,
@@ -208,7 +205,7 @@ static void *battle_thread(void *arg) {
     pid_t pid2 = ba->pid2;
     free(ba);
  
-    // Ambil nama, weapon, dan lvl kedua player
+    // Get name, weapon, and lvl of both player
     char name1[MAX_USERNAME], name2[MAX_USERNAME];
     int  wpn1, wpn2, lvl1, lvl2;
  
@@ -227,7 +224,7 @@ static void *battle_thread(void *arg) {
     }
     sem_unlock(sem_id_players);
  
-    // Kirim update awal
+    // Send the first update
     sem_lock(sem_id_battles);
     Battle *b = &shm_battles->battles[bidx];
     send_battle_update(msgq_id, pid1, b, 1, name2, wpn1, wpn2, lvl1, lvl2, 0, 0);
@@ -312,10 +309,10 @@ static void *battle_thread(void *arg) {
             break;
         }
 
-        // Kirim HP update ke client (only if not finished)
+        // Send HP update to client (only if battle isnt finished)
         update_tick++;
-        if (update_tick % 3 == 0) {     // setiap ~300ms
-            // Ambil dan reset last_dmg agar hanya muncul sekali di combat log
+        if (update_tick % 3 == 0) {     // every ~300ms
+            // Get and reset last_dmg so it only appears onece in combat log
             int dmg1 = b->last_dmg1; b->last_dmg1 = 0;
             int dmg2 = b->last_dmg2; b->last_dmg2 = 0;
             int ult1 = b->last_ult1; b->last_ult1 = 0;
@@ -368,7 +365,7 @@ static void start_battle(int p1idx, pid_t pid1, int p2idx, pid_t pid2) {
     b->finished   = 0;
     sem_unlock(sem_id_battles);
  
-    // notify clients
+    // Notify clients
     char buf[64];
     snprintf(buf, sizeof(buf), "BATTLE_START:%d", bidx);
     send_resp(pid1, RESP_MATCH_FOUND, buf, bidx);
@@ -427,7 +424,7 @@ static void *matchmaking_thread(void *arg) {
             int opp_pidx = shm_queue->queue[i].player_idx;
             pid_t opp_pid = shm_queue->queue[i].pid;
  
-            // Pair found! Remove both from queue
+            // Pair found, then remove both from queue
             shm_queue->queue[my_qslot].active = 0;
             shm_queue->queue[i].active        = 0;
             shm_queue->size -= 2;
@@ -440,7 +437,7 @@ static void *matchmaking_thread(void *arg) {
         sem_unlock(sem_id_queue);
     }
  
-    // Timeout: remove from queue and match with bot instead
+    // Timeout, then remove from queue and match with bot instead
     sem_lock(sem_id_queue);
     shm_queue->queue[my_qslot].active = 0;
     shm_queue->size--;
@@ -507,7 +504,7 @@ static void handle_login(IpcMsg *req) {
     e->p.in_use = 1;
     e->p.pid    = req->sender_pid;
 
-    /* Siapkan response dengan data player lengkap */
+    // Prepare response with full player data
     IpcResp r;
     memset(&r, 0, sizeof(r));
     r.mtype       = (long)req->sender_pid;
@@ -536,9 +533,9 @@ static void handle_logout(IpcMsg *req) {
 }
  
 static void handle_matchmake(IpcMsg *req) {
-    int pidx = req->idata;      // player index sent by client
+    int pidx = req->idata;          // player index sent by client
  
-    // Check player not in battle already
+    // Check player already in battle
     sem_lock(sem_id_battles);
     for (int i = 0; i < MAX_BATTLES; i++) {
         Battle *b = &shm_battles->battles[i];
@@ -621,7 +618,7 @@ static void handle_attack(IpcMsg *req) {
     *opp_hp   -= dmg;
     *last_atk  = now;
     
-    /* Simpan damage untuk combat log di client */
+    // Keep damage info for combat log client
     if (self_slot == 1) {
         b->last_dmg1 = dmg; b->last_ult1 = 0;
     } else {
@@ -629,11 +626,11 @@ static void handle_attack(IpcMsg *req) {
     }
 
     if (*opp_hp <= 0) {
-        b->finished = self_slot;    // self_slot wins
+        b->finished = self_slot;    // if self_slot wins
     }
  
     sem_unlock(sem_id_battles);
-    // Battle monitor thread will send an update
+    // Battle monitor thread will then send an update
 }
  
 static void handle_ultimate(IpcMsg *req) {
@@ -676,7 +673,7 @@ static void handle_ultimate(IpcMsg *req) {
     *opp_hp    -= ult_dmg;
     *last_atk   = now;
     
-    /* Simpan damage untuk combat log di client */
+    // Keep damage info for combat log client
     if (self_slot == 1) {
         b->last_dmg1 = ult_dmg; b->last_ult1 = 1;
     } else {
@@ -708,11 +705,10 @@ static void handle_buy_weapon(IpcMsg *req) {
     PlayerEntry *e = &shm_players->entries[pidx];
     int cost = WEAPONS[wpn_idx].cost;
     
-    /* Cek apakah senjata ini sudah dimiliki */
+    // Check if weapon is already owned
     if (e->p.weapon_idx == wpn_idx) {
         sem_unlock(sem_id_players);
-        send_resp(req->sender_pid, RESP_FAIL,
-                  "You already own this weapon.", 0);
+        send_resp(req->sender_pid, RESP_FAIL, "You already own this weapon.", 0);
         return;
     }
 
@@ -733,8 +729,8 @@ static void handle_buy_weapon(IpcMsg *req) {
     int new_weapon = e->p.weapon_idx;
     sem_unlock(sem_id_players);
     save_players();
- 
-    /* Kirim response dengan gold dan weapon terbaru */
+
+    // Send response with the latest gold and weapon
     IpcResp r;
     memset(&r, 0, sizeof(r));
     r.mtype        = (long)req->sender_pid;
@@ -742,8 +738,7 @@ static void handle_buy_weapon(IpcMsg *req) {
     r.idata        = new_gold;
     r.p_gold       = new_gold;
     r.p_weapon_idx = new_weapon;
-    snprintf(r.msg, sizeof(r.msg), "Bought %s! Gold: %d",
-             WEAPONS[wpn_idx].name, new_gold);
+    snprintf(r.msg, sizeof(r.msg), "Bought %s! Gold: %d", WEAPONS[wpn_idx].name, new_gold);
     msgsnd(msgq_id, &r, sizeof(r) - sizeof(long), 0);
 }
  
@@ -773,7 +768,7 @@ static void handle_get_history(IpcMsg *req) {
  
     sem_unlock(sem_id_players);
  
-    // Sentinel: end of history
+    // Sentinel, end of history
     IpcResp end;
     memset(&end, 0, sizeof(end));
     end.mtype        = (long)req->sender_pid;

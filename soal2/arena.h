@@ -96,7 +96,7 @@ typedef struct {
     time_t timestamp;
 } MatchRecord;
 
-// Extended player data and history stored in Shared Memory
+// Extended player data and history stored in ShHM
 typedef struct {
     Player p;
     MatchRecord history[MAX_HISTORY];
@@ -114,10 +114,10 @@ typedef struct {
     int finished;       // if 0 = ongoing, if 1 = p1 wins, if 2 = p2 wins
     int max_hp1;
     int max_hp2;
-    int last_dmg1;   // damage terakhir dari player1
-    int last_dmg2;   // damage terakhir dari player2
-    int last_ult1;   // 1 jika serangan terakhir p1 adalah ultimate
-    int last_ult2;   // 1 jika serangan terakhir p2 adalah ultimate
+    int last_dmg1;   // last damage from player1
+    int last_dmg2;   // last damage from player2
+    int last_ult1;   // 1 if last attack from p1 is ultimate
+    int last_ult2;   // 1 if last attack from p2 is ultimate
 } Battle;
 
 typedef struct {
@@ -159,11 +159,11 @@ typedef struct {
     char msg[256];
     int idata;          // such as battle index, gold, etc.
 
-    // Player Stats (di isi saat login dan buy weapon)
+    // Player Stats (for login and buy weaponry)
     int  p_gold;
     int  p_lvl;
     int  p_xp;
-    int  p_weapon_idx;   /* -1 = no weapon */
+    int  p_weapon_idx;   // -1 = no weapon
 
     // Battle Snapshot
     int hp_self;
@@ -175,8 +175,8 @@ typedef struct {
 
     int self_lvl;
     int opp_lvl;
-    int last_dmg;    // damage yang baru saja diberikan (0 = tidak ada)
-    int is_ultimate; // 1 = serangan itu ultimate
+    int last_dmg;    // last damage (0 = none)
+    int is_ultimate;
     int  max_hp_self;
     int  max_hp_opp;
 
