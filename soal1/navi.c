@@ -37,11 +37,10 @@ int main() {
 
     	send(sock, name, strlen(name), 0);
 
-    
     	len = recv(sock, buffer, sizeof(buffer)-1, 0);
 		if(len <= 0) {
-		printf("Connection closed.\n");
-		return 0;
+			printf("Connection closed.\n");
+			return 0;
 		}
 
     	buffer[len] = '\0';
@@ -63,8 +62,8 @@ int main() {
 
 			len = recv(sock, buffer, sizeof(buffer)-1, 0);
 			if(len <= 0) {
-			printf("Connection closed.\n");
-			return 0;
+				printf("Connection closed.\n");
+				return 0;
 			}
 
 			buffer[len] = '\0';
@@ -78,13 +77,13 @@ int main() {
 
 			// If Admin
 			if(strstr(buffer, "Authentication Successful")) {
-			is_admin = 1;
+				is_admin = 1;
 
-			printf("=== THE KNIGHTS CONSOLE ===\n");
-			printf("1. Check Active Entities (Users)\n");
-			printf("2. Check Server Uptime\n");
-			printf("3. Execute Emergency Shutdown\n");
-			printf("4. Disconnect\n\n");
+				printf("=== THE KNIGHTS CONSOLE ===\n");
+				printf("1. Check Active Entities (Users)\n");
+				printf("2. Check Server Uptime\n");
+				printf("3. Execute Emergency Shutdown\n");
+				printf("4. Disconnect\n\n");
 			}
     	}
 
@@ -102,31 +101,31 @@ int main() {
 	int waiting_response = 0;	// flag
 
     while (1) {
-	FD_ZERO(&fds);
-	FD_SET(0, &fds);	// stdin
-	FD_SET(sock, &fds);	// server
+		FD_ZERO(&fds);
+		FD_SET(0, &fds);	// stdin
+		FD_SET(sock, &fds);	// server
 
-	select(sock+1, &fds, NULL, NULL, NULL);
+		select(sock+1, &fds, NULL, NULL, NULL);
 
-	// User Input
-	if(FD_ISSET(0, &fds)) {
-	    char msg[BUFFER_SIZE];
+		// User Input
+		if(FD_ISSET(0, &fds)) {
+	    	char msg[BUFFER_SIZE];
 
-	    fgets(msg, sizeof(msg), stdin);
+	    	fgets(msg, sizeof(msg), stdin);
 
-	    // Disconnect
-	    if(strcmp(msg, "/exit\n") == 0 || (is_admin && strncmp(msg, "4", 1) == 0)) {
-		send(sock, msg, strlen(msg), 0);
-		printf("[System] Disconnecting from The Wired...\n");
-		close(sock);
-		break;
-	    }
+	    	// Disconnect
+	    	if(strcmp(msg, "/exit\n") == 0 || (is_admin && strncmp(msg, "4", 1) == 0)) {
+				send(sock, msg, strlen(msg), 0);
+				printf("[System] Disconnecting from The Wired...\n");
+				close(sock);
+				break;
+	    	}
 
-		send(sock, msg, strlen(msg), 0);
-		waiting_response = 1;
-	}
+			send(sock, msg, strlen(msg), 0);
+			waiting_response = 1;
+		}
 
-	// Server Messages
+		// Server Messages
         if(FD_ISSET(sock, &fds)) {
             int len = recv(sock, buffer, sizeof(buffer)-1, 0);
 
@@ -139,7 +138,7 @@ int main() {
             printf("%s", buffer);
 
 			waiting_response = 0;
-			
+
 			if(is_admin) {
 	    		printf("Command >> ");
 			} else {
