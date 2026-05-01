@@ -137,10 +137,236 @@ void broadcast(const char *msg, int sender_sock) {
 Fungsi ini berfungsi untuk mengirim pesan ke semua klien biasa (non-admin) kecuali pengirim itu sendiri. Di sini sistem akan memeriksa ``clients[i].is_admin == 0`` dan ``sock != sender_sock``. Sehingga Admin tidak menerima siaran percakapan dan perintah admin akan ditangani terpisah.  
 
 #### Main Function
+- Deklarasi Variabel dan Inisialisasi Jaringan
 ```c
-int main()
+int main() {
+	int server_fd, new_sock;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    fd_set readfds;
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    bind(server_fd, (struct sockaddr*)&address, sizeof(address));
+    listen(server_fd, 10);
 ```
-placeholderrrrrrrrrrrrrrrrrrrrr
+Bagian awal fungsi untuk menyiapkan seluruh variabel yang diperlukan serta membangun fondasi komunikasi jaringan. Di mana ``server_fd`` dan ``new_sock`` dideklarasikan untuk menampung deskriptor socket server dan setiap koneksi baru. Struktur ``sockaddr_in address`` diisi dengan ``AF_INET`` dan ``INADDR_ANY`` agar server menerima koneksi dari seluruh antarmuka yang tersedia, serta ``port 8080`` yang dikonversi ke network byte order melalui ``htons(PORT)``. Variabel ``fd_set readfds`` akan digunakan oleh ``select()`` dalam memantau aktivitas pada banyak socket secara bersamaan. Setelah socket berhasil dibuat dengan ``socket(AF_INET, SOCK_STREAM, 0)``, panggilan ``bind()`` melekatkan server descriptor pada alamat dan port yang telah ditentukan. Panggilan ``listen(server_fd, 10)`` kemudian mengaktifkan antrean koneksi masuk dengan panjang maksimal 10, sehingga server siap untuk menerima klien.  
+
+- Pencatatan Waktu Server
+```c
+log_event("System", "[SERVER ONLINE]");
+printf("Server running on port %d...\n", PORT);
+
+server_start_time = time(NULL);
+```
+Di sini akan dicatat peristiwa server hidup ke ``history.log`` dengan fungsi ``log_event``. Kemudian mulai menyimpan waktu mulai server di variabel global ``server_start_time``, yang nantinya digunakan untuk menghitung uptime saat admin meminta ``RPC_GET_UPTIME``.
+
+- Loop Utama
+```c
+while(1) {
+	FD_ZERO(&readfds);
+	FD_SET(server_fd, &readfds);
+	int max_fd = server_fd;
+
+	for(int i = 0; i < client_count; i++) {
+		FD_SET(clients[i].sock, &readfds);
+		if(clients[i].sock > max_fd) {
+			max_fd = clients[i].sock;
+		}
+	}
+
+	select(max_fd + 1, &readfds, NULL, NULL, NULL);
+```
+Inti server ini berada dalam loop ``while(1)`` yang memanfaatkan ``select()`` untuk menangani banyak deskriptor secara asinkron tanpa proses turunan. Di sini ``FD_ZERO`` mengosongkan himpunan ``readfds``. Lalu ``FD_SET(server_fd, &readfds)`` menambahkan socket server agar terpantau jika ada permintaan koneksi baru. Kemudian perulangan For menambahkan setiap socket klien aktif ke himpunan. Di mana variabel ``max_fd`` kemudian akan menentukan nilai deskriptor file tertinggi dan ``select(max_fd+1, ...)`` akan memblok hingga ada aktivitas pada salah satu socket. Setelah ``select()`` kembali, ``readfds`` akan berisi deskriptor yang siap dibaca.
+
+- New Client
+```c
+if(FD_ISSET(server_fd, &readfds)) {
+new_sock = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+
+char name[50];
+memset(name, 0, sizeof(name));
+recv(new_sock, name, sizeof(name), 0);
+
+name[strcspn(name, "\n")] = 0;	// remove newline
+```
+Selanjutnya apabila ``server_fd`` ada dalam kondisi siap baca, maka akan ada klien baru yang mencoba terhubung. Di mana fungsi ``accept()`` akan menerima koneksi, mengembalikan socket baru ``new_sock`` untuk komunikasi dengan klien tersebut. Kemudian pengguna akan mengisi nama yang mereka ingin pakai di The Wired sehingga server akan membaca data pertama yang dikirim klien, yaitu ``nama pengguna``. Tidak lupa juga karakter newline (``\n``) dihapus agar string bersih.
+
+- New Client: Admin
+```c
+if(strcmp(name, "The Knights") == 0) {
+	char password[50];
+
+	send(new_sock, "Enter Password: ", 16, 0);
+	recv(new_sock, password, sizeof(password), 0);
+	password[strcspn(password, "\n")] = 0;
+
+	// Password Check
+	if(strcmp(password, "protocol7") != 0) {
+		send(new_sock, "[System] Authentication Failed.\n", 32, 0);
+		close(new_sock);
+		continue;
+	}
+
+	clients[client_count].sock = new_sock;
+	strcpy(clients[client_count].name, name);
+	clients[client_count].is_admin = 1;
+	client_count++;
+
+	char logbuf[128];
+	sprintf(logbuf, "[User '%s' connected]", name);
+	log_event("System", logbuf);
+
+	send(new_sock, "[System] Authentication Successful. Granted Admin Privileges.\n\n", 67, 0);
+
+	continue;
+}
+```
+Jika hasil input nama adalah “The Knights”, server akan memulai alur autentikasi admin. Sebuah pesan ``"Enter Password: "`` dikirim ke klien, dan server menunggu balasan password. Setelah diterima dan dibersihkan dari newline, password dibandingkan dengan string ``"protocol7"``. Apabila tidak cocok, server mengirimkan pesan ``"[System] Authentication Failed."`` dan menutup socket klien. Sebaliknya, apabila password benar, admin dicatat ke dalam array ``clients`` dengan flag ``is_admin = 1``. Server kemudian menulis log ``"[User 'The Knights' connected]"``, mengirim konfirmasi sukses ke klien beserta daftar perintah yang dapat dijalankan.
+
+- New Client: User
+```c
+if(is_name_exist(name)) {
+	char msg[128];
+	sprintf(msg, "[System] The identity '%s' is already synchronized in The Wired.\n", name);
+	send(new_sock, msg, strlen(msg), 0);
+	close(new_sock);
+} else {
+	clients[client_count].sock = new_sock;
+	strcpy(clients[client_count].name, name);
+	clients[client_count].is_admin = 0;
+	client_count++;
+
+	char logbuf[128];
+	sprintf(logbuf, "[User '%s' connected]", name);
+	log_event("System", logbuf);
+
+	char welcome[128];
+	sprintf(welcome, "--- Welcome to The Wired, %s ---\n", name);
+	send(new_sock, welcome, strlen(welcome), 0);
+}
+```
+Bagian ini adalah klien baru selain Admin. Di sini server juga mengecek keunikan identitas melalui fungsi ``is_name_exist(name)``. Jika nama sudah ada, server mengirim pesan ``"[System] The identity '<nama>' is already synchronized in The Wired."``, mengirimkan penolakan ke klien, dan langsung menutup koneksi. Pengguna tidak jadi terdaftar. Sebaliknya, jika nama belum dipakai, klien diterima sebagai pengguna biasa. Ia kemudian ditambahkan ke array ``clients`` dengan flag ``is_admin = 0``. Server kemudian mencatat log koneksi dan mengirimkan ucapan selamat datang ``"--- Welcome to The Wired, <nama> ---\n"``. Dengan demikian, setiap entitas yang terhubung memiliki identitas unik yang diverifikasi di awal.
+
+- Handle Client: Admin
+```c
+if(clients[i].is_admin == 1) {
+	char buffer[BUFFER_SIZE];
+	int len = recv(clients[i].sock, buffer, sizeof(buffer), 0);
+	if(len <= 0) {
+		remove_client(i);
+		i--;
+		continue;
+	}
+	buffer[len] = '\0';
+
+	...
+	...
+
+	continue;
+}
+```
+Penanganan klien untuk admin apabila ``recv()`` mengembalikan nilai ≤ 0, klien dianggap terputus dan langsung dihapus melalui ``remove_client(i)`` dan indeks loop dikurangi (``i--``) agar iterasi tetap konsisten. Di sini Admin memiliki beberapa perintah spesial yang bisa dijalankan, yakni:  
+
+a) ``RPC_GET_USERS``
+```c
+// Option 1
+if(strncmp(buffer, "1", 1) == 0) {
+	log_event("Admin", "[RPC_GET_USERS]");
+
+	int count = 0;
+
+	for(int j = 0; j < client_count; j++) {
+		if(clients[j].is_admin == 0) {
+			count++;
+		}
+	}
+
+	char msg[100];
+	sprintf(msg, "[Admin] Active Users: %d\n", count);
+	send(clients[i].sock, msg, strlen(msg), 0);
+```
+Menghitung jumlah klien biasa (non-admin) dan mengirimkannya kembali ke admin.  
+
+b) ``RPC_GET_UPTIME``
+```c
+// Option 2
+} else if(strncmp(buffer, "2", 1) == 0) {
+	log_event("Admin", "[RPC_GET_UPTIME]");
+
+	time_t now = time(NULL);
+	int uptime = (int)(now - server_start_time);
+
+	char msg[100];
+	sprintf(msg, "[Admin] Uptime: %d seconds\n", uptime);
+	send(clients[i].sock, msg, strlen(msg), 0);
+```
+Menghitung selisih waktu saat ini dengan server_start_time, mengirimkannya.  
+
+c) ``RPC_SHUTDOWN``
+```c
+// Option 3
+} else if(strncmp(buffer, "3", 1) == 0) {
+	log_event("Admin", "[RPC_SHUTDOWN]");
+
+	char *msg = "[System] EMERGENCY SHUTDOWN INITIATED\n";
+	broadcast(msg, -1);
+
+	exit(0);
+```
+Menyiarkan pesan darurat ke semua klien biasa, mencatat log, lalu secara darurat menghentikan server dengan ``exit(0)``.  
+
+d) ``Disconnect`` Admin
+```c
+// Option 4
+} else if(strncmp(buffer, "4", 1) == 0) {
+	remove_client(i);
+	i--;
+```
+Menghapus admin dari daftar dan memutuskan hubungan.  
+
+e) Apabila Selain Opsi 1-4
+```c
+// Wrong Option
+} else {
+	char *msg = "[Admin] Invalid command. Please choose 1-4.\n";
+	send(clients[i].sock, msg, strlen(msg), 0);
+}
+```
+Memberi tahu admin bahwa perintah tidak dikenali.
+
+- Handle Client: User
+```c
+char buffer[BUFFER_SIZE];
+int len = recv(clients[i].sock, buffer, sizeof(buffer), 0);
+
+if(len <= 0) {
+	remove_client(i);
+	i--;
+} else {
+	buffer[len] = '\0';
+
+	if(strcmp(buffer, "/exit\n") == 0) {
+		remove_client(i);
+		i--;
+		continue;
+	}
+
+	char msg[1200];
+	sprintf(msg, "[%s]: %s", clients[i].name, buffer);
+
+	broadcast(msg, clients[i].sock);
+	log_chat(clients[i].name, buffer);
+}
+```
+Penanganan klien untuk pengguna biasa. Apabila user mengirim pesan ``/exit``, maka ia akan disconnect dan dihapus dari daftar dan dilakukan log pemutusan ke ``history.log``. Apabila user mengirimkan pesan biasa, maka akan terkirim seperti biasa dengan broadcast ke semua klien biasa kecuali pengirim dan admin. Selain itu, juga dilakukan penulisan log ke ``history.log`` dengan format ``[User] [[nama]: pesan]``.
+
+### navi.c
 
 ## Soal 2 - The Battle of Eterion
 Pada soal ini diminta untuk membangun sebuah sistem permainan battle arena multiplayer berbasis terminal yang disebut Eterion. Sistem ini terdiri dari dua program terpisah yang saling berkomunikasi menggunakan mekanisme Inter-Process Communication (IPC) milik Linux, yaitu Shared Memory, Message Queue, dan Semaphore.
