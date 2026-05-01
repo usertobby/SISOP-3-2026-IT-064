@@ -7,7 +7,11 @@
 ## Table of Contents
 - [Struktur Repository](#struktur-repository)  
 - [Soal 1 - Present Day, Present Time](#soal-1---present-day-present-time)
+	- [protocol.h](#protocolh)  
+	- [wired.c](#wiredc)  
 - [Soal 2 - The Battle of Eterion](#soal-2---the-battle-of-eterion)
+	- [Makefile](#makefile)  
+	- [arena.h](#arenah)
 
 ## Struktur Repository
 ![image](assets/directory-tree.png)  
@@ -37,9 +41,106 @@ Tidak berisi logika, hanya definisi konstanta yang digunakan bersama oleh server
 
 #endif
 ```
+``PORT 8080`` adalah nomor port TCP untuk komunikasi dan ``BUFFER_SIZE`` adalah ukuran maksimum buffer untuk pesan.  
 
 ### wired.c
-Ini adalah
+
+#### Logging Function 
+```c
+void log_event(const char *role, const char *msg) {
+    FILE *f = fopen("history.log", "a");
+
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+
+    fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] [%s] %s\n",
+	tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+	tm->tm_hour, tm->tm_min, tm->tm_sec,
+	role, msg);
+
+    fclose(f);
+}
+```
+Fungsi ini bertugas menangani pencatatan sistem operasional (system logging) ke ``history.log`` dengan menggunakan struktur waktu ``<time.h>`` untuk mengambil ``localtime()`` guna merekam jam eksekusi sistem. Sistem membuka file log menggunakan mode append ``"a"`` agar penulisan log baru ditambahkan di akhir file tanpa menimpa histori log sebelumnya.  
+Format:
+```
+[YYYY-MM-DD HH:MM:SS] [System/Admin/User] [Status/Command/Chat]
+```
+
+#### User Chats Logging Function
+```c
+void log_chat(const char *user, const char *msg) {
+    FILE *f = fopen("history.log", "a");
+
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+
+	char clean_msg[BUFFER_SIZE];
+    strncpy(clean_msg, msg, sizeof(clean_msg)-1);
+    clean_msg[sizeof(clean_msg)-1] = '\0';
+    clean_msg[strcspn(clean_msg, "\n")] = '\0';
+
+    fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] [User] [[%s]: %s]\n",
+	tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
+	tm->tm_hour, tm->tm_min, tm->tm_sec,
+	user, clean_msg);
+
+    fclose(f);
+}
+```
+Fungsi ini mencatat pesan obrolan pengguna ke ``history.log``. Dibanding sebelumnya, fungsi ini dilengkapi dengan proteksi memori menggunakan ``strncpy`` untuk membatasi panjang string maksimal, serta pembersihan karakter newline (``\n``) melalui ``strcspn()``. Manipulasi memori ini wajib dilakukan agar output pada file log tetap sejajar secara linier dan terstruktur rapi.  
+Format:
+```
+[YYYY-MM-DD HH:MM:SS] [User] [[nama]: pesan]
+```
+
+#### Duplicate Name Function
+```c
+int is_name_exist(const char *name) {
+    for(int i = 0; i < client_count; i++) {
+		if(strcmp(clients[i].name, name) == 0) {
+	    	return 1;
+		}
+    }
+    return 0;
+}
+```
+Fungsi ini melakukan perulangan pada array ``clients`` aktif dan menggunakan komparasi ``strcmp()`` untuk membandingkan ``clients[i].name`` dengan parameter ``name``. Fungsi mengembalikan nilai 1 apabila ada identitas yang sama dan nilai 0 jika belum ada.
+
+#### Remove Client Function
+```c
+void remove_client(int index) {
+    char logbuf[128];
+    sprintf(logbuf, "[User '%s' disconnected]", clients[index].name);
+    log_event("System", logbuf);
+
+    close(clients[index].sock);
+
+    for(int i = index; i < client_count - 1; i++) {
+		clients[i] = clients[i+1];
+    }
+    client_count--;
+}
+```
+Fungsi untuk menghapus klien dari daftar saat putus koneksi atau perintah keluar. Sistem akan mencatat log pemutusan kemudian melakukan penutupan socket klien melalui ``close()``, setelah itu akan sistem menghapus entri dari array dengan menggeser elemen setelahnya ke kiri, lalu mengurangi ``client_count`` agar susunan memori tertata ulang.
+
+#### Broadcast Function
+```c
+void broadcast(const char *msg, int sender_sock) {
+    for(int i = 0; i < client_count; i++) {
+		if(clients[i].sock != sender_sock && clients[i].is_admin == 0) {
+	    	send(clients[i].sock, msg, strlen(msg), 0);
+		}
+    }
+}
+```
+Fungsi ini berfungsi untuk mengirim pesan ke semua klien biasa (non-admin) kecuali pengirim itu sendiri. Di sini sistem akan memeriksa ``clients[i].is_admin == 0`` dan ``sock != sender_sock``. Sehingga Admin tidak menerima siaran percakapan dan perintah admin akan ditangani terpisah.  
+
+#### Main Function
+```c
+int main()
+```
+placeholderrrrrrrrrrrrrrrrrrrrr
 
 ## Soal 2 - The Battle of Eterion
 Pada soal ini diminta untuk membangun sebuah sistem permainan battle arena multiplayer berbasis terminal yang disebut Eterion. Sistem ini terdiri dari dua program terpisah yang saling berkomunikasi menggunakan mekanisme Inter-Process Communication (IPC) milik Linux, yaitu Shared Memory, Message Queue, dan Semaphore.
