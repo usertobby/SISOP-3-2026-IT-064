@@ -44,6 +44,7 @@ Tidak berisi logika, hanya definisi konstanta yang digunakan bersama oleh server
 ``PORT 8080`` adalah nomor port TCP untuk komunikasi dan ``BUFFER_SIZE`` adalah ukuran maksimum buffer untuk pesan.  
 
 ### wired.c
+File yang bertindak sebagai Server.
 
 #### Logging Function 
 ```c
@@ -367,6 +368,210 @@ if(len <= 0) {
 Penanganan klien untuk pengguna biasa. Apabila user mengirim pesan ``/exit``, maka ia akan disconnect dan dihapus dari daftar dan dilakukan log pemutusan ke ``history.log``. Apabila user mengirimkan pesan biasa, maka akan terkirim seperti biasa dengan broadcast ke semua klien biasa kecuali pengirim dan admin. Selain itu, juga dilakukan penulisan log ke ``history.log`` dengan format ``[User] [[nama]: pesan]``.
 
 ### navi.c
+File yang bertindak sebagai Client.
+
+#### Deklarasi Variabel dan Koneksi ke Server
+```c
+int main() {
+    int sock;
+    struct sockaddr_in serv_addr;
+    fd_set fds;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+
+    char name[50];
+	char buffer[BUFFER_SIZE];
+	int len;
+	int is_admin = 0;
+```
+Fungsi utama klien dimulai dengan menyiapkan variabel inti dan membangun koneksi ke server. Variabel ``sock`` dibuat untuk menampung deskriptor socket klien, sementara ``serv_addr`` diisi dengan keluarga alamat ``AF_INET``, port ``8080`` yang dikonversi menggunakan ``htons(PORT)``, dan alamat IP server ``127.0.0.1`` melalui ``inet_pton()``. Panggilan ``socket(AF_INET, SOCK_STREAM, 0)`` menghasilkan socket TCP, dan koneksi ke server dijalin dengan ``connect()``. Setelah koneksi berhasil, tiga variabel penting disiapkan, yakni ``name`` untuk menyimpan nama pengguna, ``buffer`` untuk menerima data dari server, serta ``len`` untuk panjang data yang diterima. Flag ``is_admin`` mula‑mula diinisialisasi ke ``0`` sebagai penanda bahwa klien belum memiliki hak istimewa admin.
+
+#### Fase Login
+```c
+while(1) {
+	printf("Enter your name: ");
+	fflush(stdout);
+
+	fgets(name, sizeof(name), stdin);
+	name[strcspn(name, "\n")] = 0;
+
+	send(sock, name, strlen(name), 0);
+
+	len = recv(sock, buffer, sizeof(buffer)-1, 0);
+	if(len <= 0) {
+		printf("Connection closed.\n");
+		return 0;
+	}
+
+	buffer[len] = '\0';
+	printf("%s", buffer);
+	fflush(stdout);
+
+	// Duplicate Name
+	if(strstr(buffer, "already synchronized")) {
+		close(sock);
+		return 0;
+	}
+
+	// Handle Password Admin
+	if(strstr(buffer, "Enter Password")) {
+		char pass[50];
+
+		fgets(pass, sizeof(pass), stdin);
+		send(sock, pass, strlen(pass), 0);
+
+		len = recv(sock, buffer, sizeof(buffer)-1, 0);
+		if(len <= 0) {
+			printf("Connection closed.\n");
+			return 0;
+		}
+
+		buffer[len] = '\0';
+		printf("%s", buffer);
+		fflush(stdout);
+
+		if(strstr(buffer, "Authentication Failed")) {
+			close(sock);
+			return 0;
+		}
+
+		// If Admin
+		if(strstr(buffer, "Authentication Successful")) {
+			is_admin = 1;
+
+			printf("=== THE KNIGHTS CONSOLE ===\n");
+			printf("1. Check Active Entities (Users)\n");
+			printf("2. Check Server Uptime\n");
+			printf("3. Execute Emergency Shutdown\n");
+			printf("4. Disconnect\n\n");
+		}
+	}
+
+	break;
+}
+```
+Snippet kode ini adalah saat klien memasuki loop login ``while(1)`` yang bertugas mengirimkan identitas ke server dan menangani seluruh kemungkinan tanggapan. Pengguna diminta memasukkan nama melalui ``printf("Enter your name: ")`` yang segera diikuti ``fflush(stdout)`` agar teks langsung tampil tanpa tertunda. Masukan dibaca dengan ``fgets(name, sizeof(name), stdin)`` dan karakter newline dihapus menggunakan ``strcspn``. Nama bersih dikirim ke server melalui ``send()``. Selanjutnya klien menanti balasan dengan ``recv()`` yang mengisi buffer.
+
+Balasan server dianalisis untuk menentukan hasil pendaftaran. Jika di dalamnya terdapat kalimat ``"already synchronized"``, berarti nama telah dipakai dan klien akan mencetak pesan tersebut, menutup socket, dan keluar dari program. Jika balasan mengandung ``"Enter Password"``, artinya klien sedang diakui sebagai calon admin ``“The Knights”``. Pada kondisi ini klien akan meminta pengguna memasukkan password, mengirimkannya ke server, dan membaca kembali respons otentikasi. Apabila jawaban server mengandung ``"Authentication Failed"``, socket ditutup dan program berakhir. Sebaliknya, jika hasilnya adalah ``"Authentication Successful"``, flag ``is_admin`` akan bernilai ``1`` dan ``menu perintah admin`` ditampilkan ke layar. Untuk pengguna biasa, balasan server akan berupa ucapan selamat datang, dan loop login diakhiri dengan break.
+
+#### Tampilan Prompt
+```c
+if(is_admin) {
+	    printf("Command >> ");
+	} else {
+	    printf("> ");
+	}
+	fflush(stdout);
+
+	int waiting_response = 0;
+```
+Setelah fase login, klien telah memiliki status yang jelas, yakni admin atau pengguna biasa. Di sini variabel ``waiting_response`` diinisialisasi ke ``0``, bertugas sebagai penanda kecil bahwa klien tengah menunggu balasan dari server sebelum menampilkan prompt berikutnya. Prompt awal disesuaikan dengan status mereka, jika ``is_admin`` bernilai ``1``, layar akan mencetak tampilan ``"Command >> "``. Jika tidak, layar hanya akan mencetak tampilan ``"> "``. Keduanya diikuti ``fflush(stdout)`` untuk memastikan pengguna langsung dapat mengetikkan perintah atau pesan.
+
+#### Loop Utama
+```c
+while (1) {
+	FD_ZERO(&fds);
+	FD_SET(0, &fds);	// stdin
+	FD_SET(sock, &fds);	// server
+
+	select(sock+1, &fds, NULL, NULL, NULL);
+
+	// User Input
+	if(FD_ISSET(0, &fds)) {
+		char msg[BUFFER_SIZE];
+
+		fgets(msg, sizeof(msg), stdin);
+
+		// Disconnect
+		if(strcmp(msg, "/exit\n") == 0 || (is_admin && strncmp(msg, "4", 1) == 0)) {
+			send(sock, msg, strlen(msg), 0);
+			printf("[System] Disconnecting from The Wired...\n");
+			close(sock);
+			break;
+		}
+
+		send(sock, msg, strlen(msg), 0);
+		waiting_response = 1;
+	}
+
+	// Server Messages
+	if(FD_ISSET(sock, &fds)) {
+		int len = recv(sock, buffer, sizeof(buffer)-1, 0);
+
+		if(len <= 0) {
+			printf("[System] Disconnecting from The Wired...\n");
+			break;
+		}
+
+		buffer[len] = '\0';
+		printf("%s", buffer);
+
+		waiting_response = 0;
+
+		if(is_admin) {
+			printf("Command >> ");
+		} else {
+			printf("> ");
+		}
+		fflush(stdout);
+	}
+}
+```
+Setelah beberapa fase wajib sebelumnya, sekarang klien akan memasuki loop kedua ``while(1)`` yang merupakan inti komunikasi dua arah tanpa proses ``fork``. Di sini mekanisme ``select()`` digunakan untuk memantau dua channel secara bersamaan, yakni deskriptor ``0`` (stdin) sebagai masukan pengguna dan socket ``sock`` untuk data dari server. Pada setiap iterasi, himpunan ``fds`` dikosongkan dengan ``FD_ZERO``, lalu kedua deskriptor ditambahkan dengann ``FD_SET``. Panggilan ``select(sock+1, &fds, NULL, NULL, NULL)`` nantinya akan memblokir proses hingga ada aktivitas pada salah satu sumber.
+
+a. Masukan Pengguna (``stdin ready``)  
+Klien membaca baris dari keyboard menggunakan ``fgets``. Kemudian juga ada pendeteksi perintah keluar, dimana untuk pengguna biasa menggunakan ``"/exit"``. Dan untuk admin menggunakan pilihan ke- ``'4'`` (melewati opsi disconnect). Dalam kedua kasus, perintah dikirim ke server agar server mencatat pemutusan, kemudian klien menutup socket dan keluar dari loop. Jika bukan perintah keluar, pesan dikirim langsung ke server dan ``waiting_response`` dinaikkan, menandakan bahwa klien sedang menunggu umpan balik.
+
+b. Data dari Server (``socket ready``)  
+Bagian ini menerima data dari server. Apabila panjang data ``len <= 0``, koneksi dinyatakan terputus dan klien mencetak pesan putus, lalu keluar dari loop. Jika data valid, buffer diakhiri null dan isinya dicetak ke layar. Setelah menerima balasan, ``waiting_response`` dikembalikan ke ``0``, dan prompt yang sesuai dengan status (``"> "`` atau ``"Command >> "``) dicetak kembali untuk mengundang masukan berikutnya.
+
+### Uji Coba
+Agar file wired.c dan navi.c dapat berjalan, kita kompilasi terlebih dahulu menggunakan:
+```
+gcc wired.c -o wired
+gcc navi.c -o navi
+```
+
+Selanjutnya, jalankan server terlebih dahulu dengan ``./wired`` lalu jalankan client dengan ``./navi``.  
+![image](assets/soal1/wired-run.png)
+
+Jika nama sudah ada di The Wired  
+![image](assets/soal1/duplicate-name.png)
+
+Selanjutnya output mekanisme broadcast  
+![image](assets/soal1/user1-side.png)
+![image](assets/soal1/user2-side.png)
+
+Jika user ingin disconnect  
+![image](assets/soal1/user-disconnect.png)
+
+Selanjutnya, untuk user "The Knights" (Admin) Jika Benar  
+![image](assets/soal1/admin-login-success.png)
+
+Selanjutnya, untuk user "The Knights" (Admin) Jika Salah  
+![image](assets/soal1/admin-login-fail.png)
+
+User "The Knights" (Admin) Pilih Opsi 1  
+![image](assets/soal1/admin-option-1.png)
+
+User "The Knights" (Admin) Pilih Opsi 2  
+![image](assets/soal1/admin-option-2.png)
+
+User "The Knights" (Admin) Pilih Opsi 3 (RPC_SHUTDOWN)  
+![image](assets/soal1/admin-option-3.png)
+
+User "The Knights" (Admin) Pilih Opsi 4  
+![image](assets/soal1/admin-option-4.png)
+
+Kemudian untuk contoh isi File ``history.log``  
+![image](assets/soal1/history-log.png)
+
 
 ## Soal 2 - The Battle of Eterion
 Pada soal ini diminta untuk membangun sebuah sistem permainan battle arena multiplayer berbasis terminal yang disebut Eterion. Sistem ini terdiri dari dua program terpisah yang saling berkomunikasi menggunakan mekanisme Inter-Process Communication (IPC) milik Linux, yaitu Shared Memory, Message Queue, dan Semaphore.
