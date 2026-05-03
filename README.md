@@ -2590,4 +2590,23 @@ make clear_ipc
 ```
 Perintah ini menghapus semua Shared Memory, Message Queue, dan Semaphore dengan IPC key yang digunakan program ini.
 
+![image](assets/soal2/orion-fail.png)  
+![image](assets/soal2/orion-start.png)  
+![image](assets/soal2/eternal-start.png)  
+![image](assets/soal2/register.png)  
+![image](assets/soal2/register-fail.png)  
+![image](assets/soal2/login.png)  
+![image](assets/soal2/login-fail.png)  
+![image](assets/soal2/game-menu.png)  
+![image](assets/soal2/matchmake.png)  
+![image](assets/soal2/battle-bot.png)  
+![image](assets/soal2/battle-attack.png)  
+![image](assets/soal2/battle-ult.png)  
+![image](assets/soal2/victory.png)  
+![image](assets/soal2/defeat.png)  
+![image](assets/soal2/armory-buy.png)  
+![image](assets/soal2/armory-buy-fail.png)  
+![image](assets/soal2/history.png)  
+![image](assets/soal2/exit.png)  
+
 Selanjutnya, kita harus jalankan server terlebih dahulu dengan ``./orion``.
