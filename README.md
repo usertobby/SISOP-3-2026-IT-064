@@ -2590,23 +2590,62 @@ make clear_ipc
 ```
 Perintah ini menghapus semua Shared Memory, Message Queue, dan Semaphore dengan IPC key yang digunakan program ini.
 
+``./orion`` harus dijalankan terlebih dahulu sebelum ``./eternal`` atau akan menghasilkan output seperti berikut:
 ![image](assets/soal2/orion-fail.png)  
-![image](assets/soal2/orion-start.png)  
-![image](assets/soal2/eternal-start.png)  
-![image](assets/soal2/register.png)  
-![image](assets/soal2/register-fail.png)  
-![image](assets/soal2/login.png)  
-![image](assets/soal2/login-fail.png)  
-![image](assets/soal2/game-menu.png)  
-![image](assets/soal2/matchmake.png)  
-![image](assets/soal2/battle-bot.png)  
-![image](assets/soal2/battle-attack.png)  
-![image](assets/soal2/battle-ult.png)  
-![image](assets/soal2/victory.png)  
-![image](assets/soal2/defeat.png)  
-![image](assets/soal2/armory-buy.png)  
-![image](assets/soal2/armory-buy-fail.png)  
-![image](assets/soal2/history.png)  
-![image](assets/soal2/exit.png)  
 
 Selanjutnya, kita harus jalankan server terlebih dahulu dengan ``./orion``.
+![image](assets/soal2/orion-start.png)  
+
+Kemudian jalankan ``./eternal`` dan akan muncul tampilan seperti berikut:
+![image](assets/soal2/eternal-start.png)  
+
+Apabila kita memilih opsi pertama, maka akan lanjut ke bagian registrasi akun seperti berikut:
+![image](assets/soal2/register.png)  
+
+Selanjutnya apabila username yang kita coba daftarkan sebelumnya telah terdaftar, maka tidak akan bisa didaftarkan karena setiap akun bersifat ``unique``.
+![image](assets/soal2/register-fail.png)  
+
+Langkah selanjutnya adalah uji coba ``login`` dengan username dan password yang sebelumnya telah didaftarkan.
+![image](assets/soal2/login.png)  
+
+Apabila username dan password yang dimasukkan salah, maka akan:
+![image](assets/soal2/login-wrong.png)  
+
+Apabila user yang kita masukkan sudah login di terminal client yang berbeda di waktu yang sama maka tidak akan bisa masuk karena hanya bisa 1 sesi per 1 akun.
+![image](assets/soal2/login-fail.png)  
+
+Selanjutnya adalah tampilan dari game menu dengan profile dan opsi tersedia.
+![image](assets/soal2/game-menu.png)  
+
+Saat memilih opsi 1, maka akan melakukan matchmaking dengan user lain.
+![image](assets/soal2/matchmake.png)  
+
+Apabila matchmaking melebih waktu 35 detik dan belum mendapat player asli, maka akan battle dengan bot.
+![image](assets/soal2/battle-bot.png)  
+
+Saat battle, untuk menyerang musuh gunakan key ``A`` untuk menyerang.
+![image](assets/soal2/battle-attack.png)  
+
+Gunakan key ``U`` untuk menyerang dengan Ultimate, tetapi ultimate hanya berlaku apabila memiliki weapon.
+![image](assets/soal2/battle-ult.png)  
+
+Tampilan apabila kita memenangkan pertarungan:
+![image](assets/soal2/victory.png)  
+
+Tampilan apabila kita kalah dalam pertarungan:
+![image](assets/soal2/defeat.png)  
+
+Selanjutnya pada opsi ke-2, merupakan armory dengan 5 senjata yang dapat dibeli menggunakan Gold.
+![image](assets/soal2/armory-buy.png)  
+
+Apabila Gold kita tidak mencukupi, maka tidak dapat membeli weapon yang kita inginkan.
+![image](assets/soal2/armory-buy-fail.png)  
+
+Selanjutnya pada opsi ke-3, merupakan history atau riwayat pertandingan yang telah berlalu, dapat dilihat hasilnya seperti berikut:
+![image](assets/soal2/history.png)
+
+Terakhir ada opsi ke-4 yakni Log Out, dimana kita akan log out dan kembali ke menu awal, dan di menu awal kita pilih opsi-3 untuk menghentikan permainan.
+![image](assets/soal2/exit.png)  
+
+Demikian hasil Laporan Resmi dari Modul 3 Sistem Operasi ini.  
+Terima kasih.
